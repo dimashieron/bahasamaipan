@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Web Automasi Pengubahan Huruf</title>
+  <style>
+    :root{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;}
+    body{max-width:920px;margin:28px auto;padding:18px;background:#fafafa;color:#111}
+    header{display:flex;align-items:center;gap:12px}
+    h1{font-size:20px;margin:0}
+    .card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(12,12,12,.06);margin-top:12px}
+    textarea{width:100%;min-height:140px;padding:12px;border-radius:8px;border:1px solid #e6e6e6;resize:vertical;font-size:15px}
+    .row{display:flex;gap:12px;margin-top:10px;flex-wrap:wrap}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:#111;color:#fff;cursor:pointer}
+    .muted{color:#666;font-size:13px}
+    label{display:flex;gap:8px;align-items:center}
+    select,input[type=checkbox]{margin-left:6px}
+    pre{white-space:pre-wrap;word-break:break-word;background:#f6f6f6;padding:12px;border-radius:8px}
+    footer{margin-top:18px;color:#666;font-size:13px}
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Web Automasi Pengubahan Huruf — (K / ng)</h1>
+      <div class="muted">Masukkan teks -> hasil otomatis. Boleh pilih aturan (sesuai contohmu).</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <strong>Aturan (bisa di-switch):</strong>
+    <div class="row" style="margin-top:8px">
+      <label title="Pilih mapping huruf K">
+        Mapping untuk huruf <code>K</code>:
+        <select id="kMap">
+          <option value="p">K → P (sesuai contoh: sekarang → separang → separam)</option>
+          <option value="m">K → M (opsi sesuai teks awal: K diganti M)</option>
+        </select>
+      </label>
+
+      <label title="Aktifkan penggantian 'ng' → 'm'">
+        <input type="checkbox" id="ngToggle" checked /> Ganti <code>ng</code> → <code>m</code>
+      </label>
+
+      <label title="Case sensitive behavior">
+        <input type="checkbox" id="preserveCase" checked /> Pertahankan kapitalisasi
+      </label>
+    </div>
+
+    <div style="margin-top:12px">
+      <textarea id="inputText" placeholder="Ketik atau paste teks di sini...">sekarang
+padang
+contoh lain: Angkringan
+</textarea>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="transformBtn">Transform sekarang</button>
+      <button class="btn" id="copyBtn">Salin hasil</button>
+      <button class="btn" id="downloadBtn">Unduh .txt</button>
+      <div style="flex:1" class="muted">Hasil akan muncul langsung di bawah saat transformasi dijalankan.</div>
+    </div>
+
+    <div style="margin-top:12px">
+      <strong>Hasil:</strong>
+      <pre id="outputText"></pre>
+    </div>
+
+    <footer>
+      Catatan: Implementasi ini menyediakan dua interpretasi untuk aturan <code>K</code> karena contoh yang diberikan bertentangan ("K diganti M" vs contoh keluaran). Default di-set ke opsi yang cocok dengan contoh keluaranmu (K → P). Kamu bisa ubah di dropdown.
+    </footer>
+  </div>
+
+  <script>
+    // Utility: preserve capitalization per-letter
+    function mapCharWithCase(origChar, mappedChar, preserve){
+      if(!preserve) return mappedChar;
+      if(origChar.toUpperCase() === origChar && origChar.toLowerCase() !== origChar) {
+        return mappedChar.toUpperCase();
+      }
+      if(origChar.toLowerCase() === origChar && origChar.toUpperCase() !== origChar) {
+        return mappedChar.toLowerCase();
+      }
+      return mappedChar;
+    }
+
+    function transformText(text, opts){
+      // opts = {kMap: 'p'|'m', ngEnabled: true|false, preserveCase: true|false}
+      // We'll process the text per-word but operate on full string using regex to handle overlaps.
+
+      // Step 1: Replace 'k' or 'K' according to mapping.
+      // We must avoid accidentally changing 'ng' handling order: do K replacement first, then ng replacement (or vice versa?)
+      // To match user's example, do K replacement first, then ng->m.
+
+      const preserve = !!opts.preserveCase;
+      let out = '';
+      // We'll iterate through the string char by char but handle 'ng' digraphs when needed.
+      for(let i=0;i<text.length;i++){
+        const ch = text[i];
+        const next = text[i+1] || '';
+
+        // Check for 'ng' sequence (case-insensitive) if enabled
+        if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
+          // replace 'ng' -> 'm' with case preservation (we'll use lowercase 'm' or uppercase 'M' depending on first letter case)
+          const mapped = mapCharWithCase(ch, 'm', preserve);
+          out += mapped;
+          i++; // skip next char (g)
+          continue;
+        }
+
+        // Check for K/k
+        if(ch.toLowerCase() === 'k'){
+          const mappedChar = opts.kMap.toLowerCase();
+          out += mapCharWithCase(ch, mappedChar, preserve);
+          continue;
+        }
+
+        // Otherwise, copy character
+        out += ch;
+      }
+
+      return out;
+    }
+
+    const input = document.getElementById('inputText');
+    const output = document.getElementById('outputText');
+    const kMap = document.getElementById('kMap');
+    const ngToggle = document.getElementById('ngToggle');
+    const preserveCase = document.getElementById('preserveCase');
+
+    function runTransform(){
+      const opts = {kMap:kMap.value, ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
+      const result = transformText(input.value, opts);
+      output.textContent = result;
+    }
+
+    document.getElementById('transformBtn').addEventListener('click', runTransform);
+    input.addEventListener('input', runTransform);
+    kMap.addEventListener('change', runTransform);
+    ngToggle.addEventListener('change', runTransform);
+    preserveCase.addEventListener('change', runTransform);
+
+    document.getElementById('copyBtn').addEventListener('click', async ()=>{
+      try{
+        await navigator.clipboard.writeText(output.textContent);
+        alert('Tersalin!');
+      }catch(e){
+        alert('Gagal menyalin — browser tidak mendukung API clipboard.');
+      }
+    });
+
+    document.getElementById('downloadBtn').addEventListener('click', ()=>{
+      const blob = new Blob([output.textContent], {type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'hasil-transform.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+
+    // initial run
+    runTransform();
+  </script>
+</body>
+</html>
