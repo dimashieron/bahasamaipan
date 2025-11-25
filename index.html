@@ -87,7 +87,7 @@
     return repl.toLowerCase();
   }
 
-  // preserve case for a digraph -> single-char replacement (e.g. 'ng' -> 'm')
+  // preserve case for digraph → single-char replacement (ng→m)
   function preservePairToSingle(origPair, repl, preserve){
     if(!preserve) return repl;
     if(origPair[0] && origPair[0] === origPair[0].toUpperCase()) return repl.toUpperCase();
@@ -97,39 +97,39 @@
   function transformText(text, opts){
     const preserve = !!opts.preserveCase;
 
-    // Multi-letter replacements (longest-first). Use whole-word matching.
+    // Multi replacements — 'kak' protected
     const multi = [
+      ['kak','kak'],            // protected keyword
       ['terimakasih','timapaci'],
       ['kamu','kamuna'],
       ['aku','akuna'],
-      ['nya','na']
+      ['nya','na']              // but only when standalone
     ];
 
-    // map token -> replacement (already cased)
     const tokenMap = {};
     let tokenIndex = 0;
 
-    // Apply multi replacements while protecting replaced segments with tokens
+    // MULTI Replace with word-boundaries
     let s = text;
     for(const [from,to] of multi){
       const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Use lookarounds to match whole words (safer for unicode-ish words)
-      const re = new RegExp('(?<![A-Za-z0-9_])' + esc + '(?![A-Za-z0-9_])', 'gi');
+      const re = new RegExp('\\b' + esc + '\\b', 'gi');
+
       s = s.replace(re, (m)=>{
         const repl = preserve ? preserveMultiCase(m, to) : to;
-        const token = '§§' + (tokenIndex++) + '§§'; // token uses symbols+digits so letter-rules won't touch it
+        const token = '§§' + (tokenIndex++) + '§§';
         tokenMap[token] = repl;
         return token;
       });
     }
 
-    // After multi replacements, do char-by-char handling for digraphs / chars
+    // CHARACTER-level rules
     let out = '';
     for(let i=0;i<s.length;i++){
       const ch = s[i];
       const next = s[i+1] || '';
 
-      // If current position starts a token, copy token as-is (to avoid partial char handling)
+      // token detection
       if(ch === '§' && s.slice(i).match(/^§§\d+§§/)){
         const match = s.slice(i).match(/^§§\d+§§/)[0];
         out += match;
@@ -137,53 +137,47 @@
         continue;
       }
 
-      // 'ng' -> 'm' (handle case properly)
+      // ng → m
       if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
-        const origPair = ch + next;
-        const mapped = preservePairToSingle(origPair, 'm', preserve);
-        out += mapped;
-        i++; // skip 'g'
+        const pair = ch + next;
+        out += preservePairToSingle(pair, 'm', preserve);
+        i++;
         continue;
       }
 
-      // 'k' -> kMap (fixed 'p')
+      // k → p
       if(ch.toLowerCase() === 'k'){
-        const mappedChar = opts.kMap.toLowerCase();
-        out += mapCharWithCase(ch, mappedChar, preserve);
+        out += mapCharWithCase(ch, opts.kMap.toLowerCase(), preserve);
         continue;
       }
 
-      // 'l' -> 'n'
+      // l → n
       if(ch.toLowerCase() === 'l'){
         out += mapCharWithCase(ch, 'n', preserve);
         continue;
       }
 
-      // otherwise copy
       out += ch;
     }
 
-    // Finally, restore tokens to their intended replacements
+    // restore protected tokens
     for(const token in tokenMap){
-      // tokenMap[token] already contains cased replacement
-      // replace all occurrences of token
       out = out.split(token).join(tokenMap[token]);
     }
 
     return out;
   }
 
-  // DOM bindings
+  // DOM
   const input = document.getElementById('inputText');
   const output = document.getElementById('outputText');
-  const kMap = document.getElementById('kMap'); // hidden, value 'p'
+  const kMap = document.getElementById('kMap');
   const ngToggle = document.getElementById('ngToggle');
   const preserveCase = document.getElementById('preserveCase');
 
   function runTransform(){
     const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
-    const result = transformText(input.value, opts);
-    output.textContent = result;
+    output.textContent = transformText(input.value, opts);
   }
 
   document.getElementById('transformBtn').addEventListener('click', runTransform);
@@ -195,19 +189,21 @@
     try{
       await navigator.clipboard.writeText(output.textContent);
       alert('Tersalin!');
-    }catch(e){
-      alert('Gagal menyalin — browser tidak mendukung API clipboard.');
-    }
+    }catch(e){ alert('Gagal menyalin.'); }
   });
 
   document.getElementById('downloadBtn').addEventListener('click', ()=>{
     const blob = new Blob([output.textContent], {type:'text/plain'});
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'hasil-transform.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    a.href = url;
+    a.download = 'hasil-transform.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   });
 
-  // initial run
   runTransform();
 </script>
 </body>
