@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Web Automasi Pengubahan Huruf</title>
+  <title>Website buat bikin bahasa maipan UwU 🔋🥖⚡</title>
   <style>
     :root{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;}
     body{max-width:920px;margin:28px auto;padding:18px;background:#fafafa;color:#111}
@@ -29,15 +29,11 @@
   </header>
 
   <div class="card">
-    <strong>Aturan (bisa di-switch):</strong>
+    <strong>Aturan (tetap):</strong>
     <div class="row" style="margin-top:8px">
-      <label title="Pilih mapping huruf K">
-        Mapping untuk huruf <code>K</code>:
-        <select id="kMap">
-          <option value="p">K → P (sesuai contoh: sekarang → separang → separam)</option>
-          <option value="m">K → M (opsi sesuai teks awal: K diganti M)</option>
-        </select>
-      </label>
+      <!-- Fixed mapping: K -> P (permanent). Hidden input keeps code compatibility. -->
+      <input type="hidden" id="kMap" value="p" />
+      <div class="muted">Mapping untuk huruf <code>K</code>: <strong>K → P</strong> (tetap).</div>
 
       <label title="Aktifkan penggantian 'ng' → 'm'">
         <input type="checkbox" id="ngToggle" checked /> Ganti <code>ng</code> → <code>m</code>
@@ -68,7 +64,7 @@ contoh lain: Angkringan
     </div>
 
     <footer>
-      Catatan: Implementasi ini menyediakan dua interpretasi untuk aturan <code>K</code> karena contoh yang diberikan bertentangan ("K diganti M" vs contoh keluaran). Default di-set ke opsi yang cocok dengan contoh keluaranmu (K → P). Kamu bisa ubah di dropdown.
+      Catatan: Aturan saat ini tetap — <code>K → P</code> dan <code>ng → m</code>. Kamu bisa ubah teks dan pengaturan kapitalisasi di atas.
     </footer>
   </div>
 
@@ -86,23 +82,16 @@ contoh lain: Angkringan
     }
 
     function transformText(text, opts){
-      // opts = {kMap: 'p'|'m', ngEnabled: true|false, preserveCase: true|false}
-      // We'll process the text per-word but operate on full string using regex to handle overlaps.
-
-      // Step 1: Replace 'k' or 'K' according to mapping.
-      // We must avoid accidentally changing 'ng' handling order: do K replacement first, then ng replacement (or vice versa?)
-      // To match user's example, do K replacement first, then ng->m.
-
+      // opts = {kMap: 'p', ngEnabled: true|false, preserveCase: true|false}
       const preserve = !!opts.preserveCase;
       let out = '';
-      // We'll iterate through the string char by char but handle 'ng' digraphs when needed.
       for(let i=0;i<text.length;i++){
         const ch = text[i];
         const next = text[i+1] || '';
 
         // Check for 'ng' sequence (case-insensitive) if enabled
         if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
-          // replace 'ng' -> 'm' with case preservation (we'll use lowercase 'm' or uppercase 'M' depending on first letter case)
+          // replace 'ng' -> 'm'
           const mapped = mapCharWithCase(ch, 'm', preserve);
           out += mapped;
           i++; // skip next char (g)
@@ -130,14 +119,13 @@ contoh lain: Angkringan
     const preserveCase = document.getElementById('preserveCase');
 
     function runTransform(){
-      const opts = {kMap:kMap.value, ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
+      const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
       const result = transformText(input.value, opts);
       output.textContent = result;
     }
 
     document.getElementById('transformBtn').addEventListener('click', runTransform);
     input.addEventListener('input', runTransform);
-    kMap.addEventListener('change', runTransform);
     ngToggle.addEventListener('change', runTransform);
     preserveCase.addEventListener('change', runTransform);
 
