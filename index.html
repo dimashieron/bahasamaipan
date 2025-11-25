@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Website buat bikin bahasa maipan UwU 🔋🥖⚡</title>
+  <title>maipaaaaaaaaan</title>
+
+  <!-- favicon / thumbnail (lokal file yang kamu upload) -->
+  <link rel="icon" href="/mnt/data/49f65aa4-f0fb-4d7f-a8cd-b31a5fb33ea8.png" />
+
   <style>
     :root{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;}
     body{max-width:920px;margin:28px auto;padding:18px;background:#fafafa;color:#111}
@@ -15,25 +19,26 @@
     .btn{padding:8px 12px;border-radius:8px;border:0;background:#111;color:#fff;cursor:pointer}
     .muted{color:#666;font-size:13px}
     label{display:flex;gap:8px;align-items:center}
-    select,input[type=checkbox]{margin-left:6px}
     pre{white-space:pre-wrap;word-break:break-word;background:#f6f6f6;padding:12px;border-radius:8px}
     footer{margin-top:18px;color:#666;font-size:13px}
+    code{background:#f2f4f6;padding:2px 6px;border-radius:6px;font-size:13px}
   </style>
 </head>
 <body>
   <header>
     <div>
-      <h1>Website buat bikin bahasa maipan UwU 🔋🥖⚡</h1>
-      <div class="muted">Masukkan teks -> hasil otomatis. Boleh pilih aturan (sesuai contohmu).</div>
+      <h1>maipaaaaaaaaan</h1>
+      <div class="muted">Masukkan teks → hasil otomatis (aturan: <code>K → P</code>, <code>L → N</code>, <code>ng → m</code>).</div>
     </div>
   </header>
 
   <div class="card">
     <strong>Aturan (tetap):</strong>
     <div class="row" style="margin-top:8px">
-      <!-- Fixed mapping: K -> P (permanent). Hidden input keeps code compatibility. -->
+      <!-- Fixed mappings -->
       <input type="hidden" id="kMap" value="p" />
-      <div class="muted">Mapping untuk huruf <code>K</code>: <strong>K → P</strong> (tetap).</div>
+      <input type="hidden" id="lMap" value="n" />
+      <div class="muted">Mapping: <code>K → P</code> &amp; <code>L → N</code> (tetap).</div>
 
       <label title="Aktifkan penggantian 'ng' → 'm'">
         <input type="checkbox" id="ngToggle" checked /> Ganti <code>ng</code> → <code>m</code>
@@ -48,7 +53,7 @@
       <textarea id="inputText" placeholder="Ketik atau paste teks di sini...">sekarang
 padang
 contoh lain: Angkringan
-</textarea>
+lalu lakukannya</textarea>
     </div>
 
     <div class="row">
@@ -64,7 +69,7 @@ contoh lain: Angkringan
     </div>
 
     <footer>
-      Catatan: Aturan saat ini tetap — <code>K → P</code> dan <code>ng → m</code>. Kamu bisa ubah teks dan pengaturan kapitalisasi di atas.
+      Catatan: Aturan saat ini tetap — <code>K → P</code>, <code>L → N</code>, dan <code>ng → m</code>. Kamu bisa ubah teks dan pengaturan kapitalisasi di atas.
     </footer>
   </div>
 
@@ -82,30 +87,36 @@ contoh lain: Angkringan
     }
 
     function transformText(text, opts){
-      // opts = {kMap: 'p', ngEnabled: true|false, preserveCase: true|false}
+      // opts = {kMap: 'p', lMap: 'n', ngEnabled: true|false, preserveCase: true|false}
       const preserve = !!opts.preserveCase;
       let out = '';
       for(let i=0;i<text.length;i++){
         const ch = text[i];
         const next = text[i+1] || '';
 
-        // Check for 'ng' sequence (case-insensitive) if enabled
+        // 1) 'ng' sequence (case-insensitive) -> 'm'
         if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
-          // replace 'ng' -> 'm'
           const mapped = mapCharWithCase(ch, 'm', preserve);
           out += mapped;
-          i++; // skip next char (g)
+          i++; // skip the 'g'
           continue;
         }
 
-        // Check for K/k
+        // 2) K/k -> mapped (fixed to 'p')
         if(ch.toLowerCase() === 'k'){
           const mappedChar = opts.kMap.toLowerCase();
           out += mapCharWithCase(ch, mappedChar, preserve);
           continue;
         }
 
-        // Otherwise, copy character
+        // 3) L/l -> mapped (fixed to 'n')
+        if(ch.toLowerCase() === 'l'){
+          const mappedChar = opts.lMap.toLowerCase();
+          out += mapCharWithCase(ch, mappedChar, preserve);
+          continue;
+        }
+
+        // otherwise copy
         out += ch;
       }
 
@@ -115,11 +126,17 @@ contoh lain: Angkringan
     const input = document.getElementById('inputText');
     const output = document.getElementById('outputText');
     const kMap = document.getElementById('kMap');
+    const lMap = document.getElementById('lMap');
     const ngToggle = document.getElementById('ngToggle');
     const preserveCase = document.getElementById('preserveCase');
 
     function runTransform(){
-      const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
+      const opts = {
+        kMap: kMap ? (kMap.value || 'p') : 'p',
+        lMap: lMap ? (lMap.value || 'n') : 'n',
+        ngEnabled: ngToggle.checked,
+        preserveCase: preserveCase.checked
+      };
       const result = transformText(input.value, opts);
       output.textContent = result;
     }
