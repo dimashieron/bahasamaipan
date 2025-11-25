@@ -4,10 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>maipaaaaaaaaan🔋⚡</title>
-
-  <!-- favicon / thumbnail (lokal file yang kamu upload) -->
-  <link rel="icon" href="/mnt/data/49f65aa4-f0fb-4d7f-a8cd-b31a5fb33ea8.png" />
-
   <style>
     :root{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;}
     body{max-width:920px;margin:28px auto;padding:18px;background:#fafafa;color:#111}
@@ -21,24 +17,22 @@
     label{display:flex;gap:8px;align-items:center}
     pre{white-space:pre-wrap;word-break:break-word;background:#f6f6f6;padding:12px;border-radius:8px}
     footer{margin-top:18px;color:#666;font-size:13px}
-    code{background:#f2f4f6;padding:2px 6px;border-radius:6px;font-size:13px}
   </style>
 </head>
 <body>
   <header>
     <div>
-      <h1>maipaaaaaaaaan</h1>
-      <div class="muted">Masukkan teks → hasil otomatis (aturan: <code>K → P</code>, <code>L → N</code>, <code>ng → m</code>).</div>
+      <h1>maipaaaaaaaaan🔋⚡</h1>
+      <div class="muted">Masukkan teks -> hasil otomatis. Aturan tetap: <code>K → P</code>, <code>ng → m</code>, plus aturan kata & huruf tambahan.</div>
     </div>
   </header>
 
   <div class="card">
     <strong>Aturan (tetap):</strong>
     <div class="row" style="margin-top:8px">
-      <!-- Fixed mappings -->
+      <!-- Fixed mapping: K -> P (permanent). Hidden input keeps code compatibility. -->
       <input type="hidden" id="kMap" value="p" />
-      <input type="hidden" id="lMap" value="n" />
-      <div class="muted">Mapping: <code>K → P</code> &amp; <code>L → N</code> (tetap).</div>
+      <div class="muted">Mapping untuk huruf <code>K</code>: <strong>K → P</strong> (tetap). <strong>ng → m</strong> aktif.</div>
 
       <label title="Aktifkan penggantian 'ng' → 'm'">
         <input type="checkbox" id="ngToggle" checked /> Ganti <code>ng</code> → <code>m</code>
@@ -53,7 +47,9 @@
       <textarea id="inputText" placeholder="Ketik atau paste teks di sini...">sekarang
 padang
 contoh lain: Angkringan
-lalu lakukannya</textarea>
+aku sayang kamu
+terimakasih banyak
+</textarea>
     </div>
 
     <div class="row">
@@ -69,7 +65,7 @@ lalu lakukannya</textarea>
     </div>
 
     <footer>
-      Catatan: Aturan saat ini tetap — <code>K → P</code>, <code>L → N</code>, dan <code>ng → m</code>. Kamu bisa ubah teks dan pengaturan kapitalisasi di atas.
+      Catatan: Aturan saat ini tetap — <code>K → P</code>, <code>ng → m</code>, plus penggantian kata: <code>terimakasih→timapaci</code>, <code>kamu→kamuna</code>, <code>aku→akuna</code>, <code>nya→na</code>, dan huruf <code>l→n</code>. Kapitalisasi dipertahankan bila opsi dicentang.
     </footer>
   </div>
 
@@ -86,33 +82,60 @@ lalu lakukannya</textarea>
       return mappedChar;
     }
 
-    function transformText(text, opts){
-      // opts = {kMap: 'p', lMap: 'n', ngEnabled: true|false, preserveCase: true|false}
-      const preserve = !!opts.preserveCase;
-      let out = '';
-      for(let i=0;i<text.length;i++){
-        const ch = text[i];
-        const next = text[i+1] || '';
+    // NEW: helper for multi-word case preservation
+    function isAllUpper(s){ return s && s.toUpperCase() === s && s.toLowerCase() !== s; }
+    function isCapitalized(s){ return s && s[0] === s[0].toUpperCase() && s.slice(1) === s.slice(1).toLowerCase(); }
+    function preserveMultiCase(orig, repl){
+      if(isAllUpper(orig)) return repl.toUpperCase();
+      if(isCapitalized(orig)) return repl.charAt(0).toUpperCase() + repl.slice(1).toLowerCase();
+      return repl.toLowerCase();
+    }
 
-        // 1) 'ng' sequence (case-insensitive) -> 'm'
+    function transformText(text, opts){
+      // opts = {kMap: 'p', ngEnabled: true|false, preserveCase: true|false}
+      const preserve = !!opts.preserveCase;
+
+      // Multi-letter replacements (longest-first)
+      const multi = [
+        ['terimakasih','timapaci'],
+        ['kamu','kamuna'],
+        ['aku','akuna'],
+        ['nya','na']
+      ];
+
+      // Apply multi replacements case-insensitively while preserving case
+      let s = text;
+      for(const [from,to] of multi){
+        // escape regex-special
+        const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(esc, 'gi');
+        s = s.replace(re, (m)=> preserve ? preserveMultiCase(m, to) : to);
+      }
+
+      // After multi replacements, do char-by-char handling for digraphs / chars
+      let out = '';
+      for(let i=0;i<s.length;i++){
+        const ch = s[i];
+        const next = s[i+1] || '';
+
+        // 'ng' -> 'm'
         if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
           const mapped = mapCharWithCase(ch, 'm', preserve);
           out += mapped;
-          i++; // skip the 'g'
+          i++; // skip 'g'
           continue;
         }
 
-        // 2) K/k -> mapped (fixed to 'p')
+        // 'k' -> kMap (fixed 'p')
         if(ch.toLowerCase() === 'k'){
           const mappedChar = opts.kMap.toLowerCase();
           out += mapCharWithCase(ch, mappedChar, preserve);
           continue;
         }
 
-        // 3) L/l -> mapped (fixed to 'n')
+        // 'l' -> 'n'
         if(ch.toLowerCase() === 'l'){
-          const mappedChar = opts.lMap.toLowerCase();
-          out += mapCharWithCase(ch, mappedChar, preserve);
+          out += mapCharWithCase(ch, 'n', preserve);
           continue;
         }
 
@@ -126,17 +149,11 @@ lalu lakukannya</textarea>
     const input = document.getElementById('inputText');
     const output = document.getElementById('outputText');
     const kMap = document.getElementById('kMap');
-    const lMap = document.getElementById('lMap');
     const ngToggle = document.getElementById('ngToggle');
     const preserveCase = document.getElementById('preserveCase');
 
     function runTransform(){
-      const opts = {
-        kMap: kMap ? (kMap.value || 'p') : 'p',
-        lMap: lMap ? (lMap.value || 'n') : 'n',
-        ngEnabled: ngToggle.checked,
-        preserveCase: preserveCase.checked
-      };
+      const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
       const result = transformText(input.value, opts);
       output.textContent = result;
     }
