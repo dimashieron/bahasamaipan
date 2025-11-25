@@ -94,28 +94,47 @@
     return repl.toLowerCase();
   }
 
+  // Insert "Bypass first-letter" checkbox into the UI (next to preserveCase)
+  (function insertBypassCheckbox(){
+    try{
+      const preserveEl = document.getElementById('preserveCase');
+      if(preserveEl && !document.getElementById('bypassFirst')){
+        const container = preserveEl.parentElement.parentElement || preserveEl.parentElement;
+        const label = document.createElement('label');
+        label.style.marginLeft = '8px';
+        label.title = "Bypass first letter of each word (don't apply rules to first letter)";
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = 'bypassFirst';
+        cb.checked = false;
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(' Bypass first-letter'));
+        container.appendChild(label);
+      }
+    }catch(e){ /* ignore UI insert errors */ }
+  })();
+
+
   function transformText(text, opts){
     const preserve = !!opts.preserveCase;
 
     // Multi replacements — 'kak' protected
     const multi = [
       ['kak','kak'],            // protected keyword
-      ['lucu','lucu'],            // protected keyword
       ['terimakasih','timapaci'],
       ['kamu','kamuna'],
       ['aku','akuna'],
-      ['nya','na']              // but only when standalone
+      ['nya','na']              // only matched as whole word
     ];
 
     const tokenMap = {};
     let tokenIndex = 0;
 
-    // MULTI Replace with word-boundaries
+    // MULTI Replace with word-boundaries, protect replaced segments with tokens
     let s = text;
     for(const [from,to] of multi){
       const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = new RegExp('\\b' + esc + '\\b', 'gi');
-
       s = s.replace(re, (m)=>{
         const repl = preserve ? preserveMultiCase(m, to) : to;
         const token = '§§' + (tokenIndex++) + '§§';
@@ -124,13 +143,13 @@
       });
     }
 
-    // CHARACTER-level rules
+    // CHARACTER-level rules with first-letter bypass
     let out = '';
     for(let i=0;i<s.length;i++){
       const ch = s[i];
       const next = s[i+1] || '';
 
-      // token detection
+      // token detection (copy token as-is)
       if(ch === '§' && s.slice(i).match(/^§§\d+§§/)){
         const match = s.slice(i).match(/^§§\d+§§/)[0];
         out += match;
@@ -138,11 +157,22 @@
         continue;
       }
 
-      // ng → m
+      // Determine if this position is start of a word:
+      // start if at index 0 or previous char is non-word (not letter/number/underscore)
+      const prev = s[i-1] || '';
+      const isStartOfWord = (i === 0) || !(/[A-Za-z0-9_]/).test(prev);
+
+      // Bypass first-letter of a word if option enabled and current char is a letter
+      if(opts.bypassFirst && isStartOfWord && /[A-Za-z]/i.test(ch)){
+        out += ch;
+        continue;
+      }
+
+      // ng → m (digraph)
       if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
         const pair = ch + next;
         out += preservePairToSingle(pair, 'm', preserve);
-        i++;
+        i++; // skip 'g'
         continue;
       }
 
@@ -158,10 +188,11 @@
         continue;
       }
 
+      // default copy
       out += ch;
     }
 
-    // restore protected tokens
+    // restore tokens
     for(const token in tokenMap){
       out = out.split(token).join(tokenMap[token]);
     }
@@ -169,22 +200,34 @@
     return out;
   }
 
-  // DOM
+  // DOM hooks
   const input = document.getElementById('inputText');
   const output = document.getElementById('outputText');
   const kMap = document.getElementById('kMap');
   const ngToggle = document.getElementById('ngToggle');
   const preserveCase = document.getElementById('preserveCase');
 
+  // get the bypass checkbox (may have been inserted above)
+  function getBypassCheckbox(){ return document.getElementById('bypassFirst'); }
+
   function runTransform(){
-    const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
-    output.textContent = transformText(input.value, opts);
+    const bypass = !!(getBypassCheckbox && getBypassCheckbox().checked);
+    const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked, bypassFirst: bypass};
+    // pass bypassFirst as opts.bypassFirst for usage
+    opts.bypassFirst = bypass; // maintain compatibility
+    // transform uses opts.bypassFirst (but code reads opts.bypassFirst via opts.bypassFirst?)
+    // to keep existing variable name used earlier, also copy it to opts.bypassFirst
+    // call transformText with updated options
+    output.textContent = transformText(input.value, {kMap:opts.kMap, ngEnabled:opts.ngEnabled, preserveCase:opts.preserveCase, bypassFirst:opts.bypassFirst});
   }
 
+  // wire events
   document.getElementById('transformBtn').addEventListener('click', runTransform);
   input.addEventListener('input', runTransform);
   ngToggle.addEventListener('change', runTransform);
   preserveCase.addEventListener('change', runTransform);
+  // also wire the newly inserted checkbox if exists
+  setTimeout(()=>{ const b = getBypassCheckbox(); if(b) b.addEventListener('change', runTransform); }, 50);
 
   document.getElementById('copyBtn').addEventListener('click', async ()=>{
     try{
@@ -205,6 +248,7 @@
     URL.revokeObjectURL(url);
   });
 
+  // initial run
   runTransform();
 </script>
 </body>
