@@ -44,11 +44,7 @@
     </div>
 
     <div style="margin-top:12px">
-      <textarea id="inputText" placeholder="Ketik atau paste teks di sini...">sekarang
-padang
-contoh lain: Angkringan
-aku sayang kamu
-terimakasih banyak
+      <textarea id="inputText" placeholder="Apa yang sedang anda pikirkan?"></textarea>
 </textarea>
     </div>
 
@@ -70,117 +66,149 @@ terimakasih banyak
   </div>
 
   <script>
-    // Utility: preserve capitalization per-letter
-    function mapCharWithCase(origChar, mappedChar, preserve){
-      if(!preserve) return mappedChar;
-      if(origChar.toUpperCase() === origChar && origChar.toLowerCase() !== origChar) {
-        return mappedChar.toUpperCase();
-      }
-      if(origChar.toLowerCase() === origChar && origChar.toUpperCase() !== origChar) {
-        return mappedChar.toLowerCase();
-      }
-      return mappedChar;
+  // Utility: preserve capitalization per-letter
+  function mapCharWithCase(origChar, mappedChar, preserve){
+    if(!preserve) return mappedChar;
+    if(origChar.toUpperCase() === origChar && origChar.toLowerCase() !== origChar) {
+      return mappedChar.toUpperCase();
+    }
+    if(origChar.toLowerCase() === origChar && origChar.toUpperCase() !== origChar) {
+      return mappedChar.toLowerCase();
+    }
+    return mappedChar;
+  }
+
+  // helper for multi-word case preservation
+  function isAllUpper(s){ return !!s && s.toUpperCase() === s && s.toLowerCase() !== s; }
+  function isCapitalized(s){ return !!s && s[0] === s[0].toUpperCase() && s.slice(1) === s.slice(1).toLowerCase(); }
+  function preserveMultiCase(orig, repl){
+    if(isAllUpper(orig)) return repl.toUpperCase();
+    if(isCapitalized(orig)) return repl.charAt(0).toUpperCase() + repl.slice(1).toLowerCase();
+    return repl.toLowerCase();
+  }
+
+  // preserve case for a digraph -> single-char replacement (e.g. 'ng' -> 'm')
+  function preservePairToSingle(origPair, repl, preserve){
+    if(!preserve) return repl;
+    if(origPair[0] && origPair[0] === origPair[0].toUpperCase()) return repl.toUpperCase();
+    return repl.toLowerCase();
+  }
+
+  function transformText(text, opts){
+    const preserve = !!opts.preserveCase;
+
+    // Multi-letter replacements (longest-first). Use whole-word matching.
+    const multi = [
+      ['terimakasih','timapaci'],
+      ['kamu','kamuna'],
+      ['aku','akuna'],
+      ['nya','na']
+    ];
+
+    // map token -> replacement (already cased)
+    const tokenMap = {};
+    let tokenIndex = 0;
+
+    // Apply multi replacements while protecting replaced segments with tokens
+    let s = text;
+    for(const [from,to] of multi){
+      const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Use lookarounds to match whole words (safer for unicode-ish words)
+      const re = new RegExp('(?<![A-Za-z0-9_])' + esc + '(?![A-Za-z0-9_])', 'gi');
+      s = s.replace(re, (m)=>{
+        const repl = preserve ? preserveMultiCase(m, to) : to;
+        const token = '§§' + (tokenIndex++) + '§§'; // token uses symbols+digits so letter-rules won't touch it
+        tokenMap[token] = repl;
+        return token;
+      });
     }
 
-    // NEW: helper for multi-word case preservation
-    function isAllUpper(s){ return s && s.toUpperCase() === s && s.toLowerCase() !== s; }
-    function isCapitalized(s){ return s && s[0] === s[0].toUpperCase() && s.slice(1) === s.slice(1).toLowerCase(); }
-    function preserveMultiCase(orig, repl){
-      if(isAllUpper(orig)) return repl.toUpperCase();
-      if(isCapitalized(orig)) return repl.charAt(0).toUpperCase() + repl.slice(1).toLowerCase();
-      return repl.toLowerCase();
-    }
+    // After multi replacements, do char-by-char handling for digraphs / chars
+    let out = '';
+    for(let i=0;i<s.length;i++){
+      const ch = s[i];
+      const next = s[i+1] || '';
 
-    function transformText(text, opts){
-      // opts = {kMap: 'p', ngEnabled: true|false, preserveCase: true|false}
-      const preserve = !!opts.preserveCase;
-
-      // Multi-letter replacements (longest-first)
-      const multi = [
-        ['terimakasih','timapaci'],
-        ['kamu','kamuna'],
-        ['aku','akuna'],
-        ['nya','na']
-      ];
-
-      // Apply multi replacements case-insensitively while preserving case
-      let s = text;
-      for(const [from,to] of multi){
-        // escape regex-special
-        const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const re = new RegExp(esc, 'gi');
-        s = s.replace(re, (m)=> preserve ? preserveMultiCase(m, to) : to);
+      // If current position starts a token, copy token as-is (to avoid partial char handling)
+      if(ch === '§' && s.slice(i).match(/^§§\d+§§/)){
+        const match = s.slice(i).match(/^§§\d+§§/)[0];
+        out += match;
+        i += match.length - 1;
+        continue;
       }
 
-      // After multi replacements, do char-by-char handling for digraphs / chars
-      let out = '';
-      for(let i=0;i<s.length;i++){
-        const ch = s[i];
-        const next = s[i+1] || '';
-
-        // 'ng' -> 'm'
-        if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
-          const mapped = mapCharWithCase(ch, 'm', preserve);
-          out += mapped;
-          i++; // skip 'g'
-          continue;
-        }
-
-        // 'k' -> kMap (fixed 'p')
-        if(ch.toLowerCase() === 'k'){
-          const mappedChar = opts.kMap.toLowerCase();
-          out += mapCharWithCase(ch, mappedChar, preserve);
-          continue;
-        }
-
-        // 'l' -> 'n'
-        if(ch.toLowerCase() === 'l'){
-          out += mapCharWithCase(ch, 'n', preserve);
-          continue;
-        }
-
-        // otherwise copy
-        out += ch;
+      // 'ng' -> 'm' (handle case properly)
+      if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
+        const origPair = ch + next;
+        const mapped = preservePairToSingle(origPair, 'm', preserve);
+        out += mapped;
+        i++; // skip 'g'
+        continue;
       }
 
-      return out;
-    }
-
-    const input = document.getElementById('inputText');
-    const output = document.getElementById('outputText');
-    const kMap = document.getElementById('kMap');
-    const ngToggle = document.getElementById('ngToggle');
-    const preserveCase = document.getElementById('preserveCase');
-
-    function runTransform(){
-      const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
-      const result = transformText(input.value, opts);
-      output.textContent = result;
-    }
-
-    document.getElementById('transformBtn').addEventListener('click', runTransform);
-    input.addEventListener('input', runTransform);
-    ngToggle.addEventListener('change', runTransform);
-    preserveCase.addEventListener('change', runTransform);
-
-    document.getElementById('copyBtn').addEventListener('click', async ()=>{
-      try{
-        await navigator.clipboard.writeText(output.textContent);
-        alert('Tersalin!');
-      }catch(e){
-        alert('Gagal menyalin — browser tidak mendukung API clipboard.');
+      // 'k' -> kMap (fixed 'p')
+      if(ch.toLowerCase() === 'k'){
+        const mappedChar = opts.kMap.toLowerCase();
+        out += mapCharWithCase(ch, mappedChar, preserve);
+        continue;
       }
-    });
 
-    document.getElementById('downloadBtn').addEventListener('click', ()=>{
-      const blob = new Blob([output.textContent], {type:'text/plain'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'hasil-transform.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    });
+      // 'l' -> 'n'
+      if(ch.toLowerCase() === 'l'){
+        out += mapCharWithCase(ch, 'n', preserve);
+        continue;
+      }
 
-    // initial run
-    runTransform();
-  </script>
+      // otherwise copy
+      out += ch;
+    }
+
+    // Finally, restore tokens to their intended replacements
+    for(const token in tokenMap){
+      // tokenMap[token] already contains cased replacement
+      // replace all occurrences of token
+      out = out.split(token).join(tokenMap[token]);
+    }
+
+    return out;
+  }
+
+  // DOM bindings
+  const input = document.getElementById('inputText');
+  const output = document.getElementById('outputText');
+  const kMap = document.getElementById('kMap'); // hidden, value 'p'
+  const ngToggle = document.getElementById('ngToggle');
+  const preserveCase = document.getElementById('preserveCase');
+
+  function runTransform(){
+    const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked};
+    const result = transformText(input.value, opts);
+    output.textContent = result;
+  }
+
+  document.getElementById('transformBtn').addEventListener('click', runTransform);
+  input.addEventListener('input', runTransform);
+  ngToggle.addEventListener('change', runTransform);
+  preserveCase.addEventListener('change', runTransform);
+
+  document.getElementById('copyBtn').addEventListener('click', async ()=>{
+    try{
+      await navigator.clipboard.writeText(output.textContent);
+      alert('Tersalin!');
+    }catch(e){
+      alert('Gagal menyalin — browser tidak mendukung API clipboard.');
+    }
+  });
+
+  document.getElementById('downloadBtn').addEventListener('click', ()=>{
+    const blob = new Blob([output.textContent], {type:'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'hasil-transform.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  });
+
+  // initial run
+  runTransform();
+</script>
 </body>
 </html>
