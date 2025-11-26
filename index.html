@@ -97,10 +97,10 @@
   function transformText(text, opts){
     const preserve = !!opts.preserveCase;
 
-    // Kata yang tidak boleh disentuh aturan huruf
+    // Kata yang diproteksi dari perubahan huruf
     const protectedWords = ['kak'];
 
-    // Multi replacements
+    // Multi-word replacements (words replaced first and tokenized)
     const multi = [
       ['terimakasih','timapaci'],
       ['kamu','kamuna'],
@@ -111,7 +111,7 @@
     let tokenIndex = 0;
     let s = text;
 
-    // Multi-word replacers
+    // Apply multi-word replacements (whole-word) and protect via tokens
     for(const [from,to] of multi){
       const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = new RegExp('\\b' + esc + '\\b', 'gi');
@@ -123,27 +123,27 @@
       });
     }
 
-    // Protected words (kak)
+    // Protect explicit protectedWords
     for(const w of protectedWords){
       const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = new RegExp('\\b' + esc + '\\b', 'gi');
       s = s.replace(re, (m)=>{
         const token = '§§' + (tokenIndex++) + '§§';
-        tokenMap[token] = m;
+        tokenMap[token] = m; // keep original case
         return token;
       });
     }
 
-    // nya → na (hanya kata terpisah)
-    s = s.replace(/\bnya\b/gi, (m)=> preserve ? preserveMultiCase(m, 'na') : 'na');
+    // === NEW: Replace 'nya' everywhere (global), preserving case if requested ===
+    s = s.replace(/nya/gi, (m) => preserve ? preserveMultiCase(m, 'na') : 'na');
 
-    // Character rules dengan first-letter bypass otomatis
+    // CHARACTER-level rules with first-letter bypass (forced)
     let out = '';
     for(let i=0;i<s.length;i++){
       const ch = s[i];
       const next = s[i+1] || '';
 
-      // restore token placeholder as-is
+      // token detection (copy token as-is)
       if(ch === '§' && s.slice(i).match(/^§§\d+§§/)){
         const match = s.slice(i).match(/^§§\d+§§/)[0];
         out += match;
@@ -154,35 +154,36 @@
       const prev = s[i-1] || '';
       const isStartOfWord = (i === 0) || !(/[A-Za-z0-9_]/).test(prev);
 
-      // FIRST-LETTER BYPASS
+      // FIRST-LETTER BYPASS (automatic)
       if(isStartOfWord && /[A-Za-z]/.test(ch)){
         out += ch;
         continue;
       }
 
-      // ng → m
+      // ng -> m
       if(ch.toLowerCase() === 'n' && next.toLowerCase() === 'g'){
         out += preservePairToSingle(ch+next, 'm', preserve);
-        i++;
+        i++; // skip g
         continue;
       }
 
-      // k → p
+      // k -> p (non-first letters only due to bypass)
       if(ch.toLowerCase() === 'k'){
         out += mapCharWithCase(ch, 'p', preserve);
         continue;
       }
 
-      // l → n
+      // l -> n
       if(ch.toLowerCase() === 'l'){
         out += mapCharWithCase(ch, 'n', preserve);
         continue;
       }
 
+      // default copy
       out += ch;
     }
 
-    // Restore tokens
+    // Restore tokens to their intended replacements/protected originals
     for(const token in tokenMap){
       out = out.split(token).join(tokenMap[token]);
     }
@@ -190,15 +191,13 @@
     return out;
   }
 
-  // DOM
+  // DOM hooks
   const input = document.getElementById('inputText');
   const output = document.getElementById('outputText');
   const preserveCase = document.getElementById('preserveCase');
 
   function runTransform(){
-    output.textContent = transformText(input.value, {
-      preserveCase: preserveCase.checked
-    });
+    output.textContent = transformText(input.value, { preserveCase: preserveCase.checked });
   }
 
   document.getElementById('transformBtn').addEventListener('click', runTransform);
@@ -206,10 +205,8 @@
   preserveCase.addEventListener('change', runTransform);
 
   document.getElementById('copyBtn').addEventListener('click', async ()=>{
-    try{
-      await navigator.clipboard.writeText(output.textContent);
-      alert('Tersalin!');
-    }catch(e){ alert('Gagal menyalin.'); }
+    try{ await navigator.clipboard.writeText(output.textContent); alert('Tersalin!'); }
+    catch(e){ alert('Gagal menyalin.'); }
   });
 
   document.getElementById('downloadBtn').addEventListener('click', ()=>{
@@ -220,6 +217,7 @@
     URL.revokeObjectURL(url);
   });
 
+  // initial run
   runTransform();
 </script>
 </body>
