@@ -23,15 +23,16 @@
   <header>
     <div>
       <h1>maipaaaaaaaaan🔋⚡</h1>
+      <div class="muted">Masukkan teks -> hasil otomatis. Aturan tetap: <code>K → P</code>, <code>ng → m</code>, plus aturan kata & huruf tambahan.</div>
     </div>
   </header>
 
   <div class="card">
-    <strong>Masukin teksnya, sisanya biar bot yang atur :3:</strong>
+    <strong>Aturan (tetap):</strong>
     <div class="row" style="margin-top:8px">
       <!-- Fixed mapping: K -> P (permanent). Hidden input keeps code compatibility. -->
       <input type="hidden" id="kMap" value="p" />
-      <div class="muted">
+      <div class="muted">Mapping untuk huruf <code>K</code>: <strong>K → P</strong> (tetap). <strong>ng → m</strong> aktif.</div>
 
       <label title="Aktifkan penggantian 'ng' → 'm'">
         <input type="checkbox" id="ngToggle" checked /> Ganti <code>ng</code> → <code>m</code>
@@ -48,6 +49,7 @@
     </div>
 
     <div class="row">
+      <button class="btn" id="transformBtn">Transform sekarang</button>
       <button class="btn" id="copyBtn">Salin hasil</button>
       <button class="btn" id="downloadBtn">Unduh .txt</button>
       <div style="flex:1" class="muted">Hasil akan muncul langsung di bawah saat transformasi dijalankan.</div>
@@ -58,6 +60,9 @@
       <pre id="outputText"></pre>
     </div>
 
+    <footer>
+      Catatan: Aturan saat ini tetap — <code>K → P</code>, <code>ng → m</code>, plus penggantian kata: <code>terimakasih→timapaci</code>, <code>kamu→kamuna</code>, <code>aku→akuna</code>, <code>nya→na</code>, dan huruf <code>l→n</code>. Kapitalisasi dipertahankan bila opsi dicentang.
+    </footer>
   </div>
 
   <script>
@@ -92,10 +97,10 @@
   function transformText(text, opts){
     const preserve = !!opts.preserveCase;
 
-    // Kata yang diproteksi dari perubahan huruf
+    // Kata yang tidak boleh disentuh aturan huruf
     const protectedWords = ['kak'];
 
-    // Multi-word replacements (words replaced first and tokenized)
+    // Multi replacements
     const multi = [
       ['terimakasih','timapaci'],
       ['kamu','kamuna'],
@@ -106,7 +111,7 @@
     let tokenIndex = 0;
     let s = text;
 
-    // Apply multi-word replacements (whole-word) and protect via tokens
+    // Multi-word replacers
     for(const [from,to] of multi){
       const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = new RegExp('\\b' + esc + '\\b', 'gi');
@@ -118,27 +123,27 @@
       });
     }
 
-    // Protect explicit protectedWords
+    // Protected words (kak)
     for(const w of protectedWords){
       const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = new RegExp('\\b' + esc + '\\b', 'gi');
       s = s.replace(re, (m)=>{
         const token = '§§' + (tokenIndex++) + '§§';
-        tokenMap[token] = m; // keep original case
+        tokenMap[token] = m;
         return token;
       });
     }
 
-    // === NEW: Replace 'nya' everywhere (global), preserving case if requested ===
-    s = s.replace(/nya/gi, (m) => preserve ? preserveMultiCase(m, 'na') : 'na');
+    // nya → na (hanya kata terpisah)
+    s = s.replace(/\bnya\b/gi, (m)=> preserve ? preserveMultiCase(m, 'na') : 'na');
 
-    // CHARACTER-level rules with first-letter bypass (forced)
+    // Character rules dengan first-letter bypass otomatis
     let out = '';
     for(let i=0;i<s.length;i++){
       const ch = s[i];
       const next = s[i+1] || '';
 
-      // token detection (copy token as-is)
+      // restore token placeholder as-is
       if(ch === '§' && s.slice(i).match(/^§§\d+§§/)){
         const match = s.slice(i).match(/^§§\d+§§/)[0];
         out += match;
@@ -149,36 +154,35 @@
       const prev = s[i-1] || '';
       const isStartOfWord = (i === 0) || !(/[A-Za-z0-9_]/).test(prev);
 
-      // FIRST-LETTER BYPASS (automatic)
+      // FIRST-LETTER BYPASS
       if(isStartOfWord && /[A-Za-z]/.test(ch)){
         out += ch;
         continue;
       }
 
-      // ng -> m
+      // ng → m
       if(ch.toLowerCase() === 'n' && next.toLowerCase() === 'g'){
         out += preservePairToSingle(ch+next, 'm', preserve);
-        i++; // skip g
+        i++;
         continue;
       }
 
-      // k -> p (non-first letters only due to bypass)
+      // k → p
       if(ch.toLowerCase() === 'k'){
         out += mapCharWithCase(ch, 'p', preserve);
         continue;
       }
 
-      // l -> n
+      // l → n
       if(ch.toLowerCase() === 'l'){
         out += mapCharWithCase(ch, 'n', preserve);
         continue;
       }
 
-      // default copy
       out += ch;
     }
 
-    // Restore tokens to their intended replacements/protected originals
+    // Restore tokens
     for(const token in tokenMap){
       out = out.split(token).join(tokenMap[token]);
     }
@@ -186,13 +190,15 @@
     return out;
   }
 
-  // DOM hooks
+  // DOM
   const input = document.getElementById('inputText');
   const output = document.getElementById('outputText');
   const preserveCase = document.getElementById('preserveCase');
 
   function runTransform(){
-    output.textContent = transformText(input.value, { preserveCase: preserveCase.checked });
+    output.textContent = transformText(input.value, {
+      preserveCase: preserveCase.checked
+    });
   }
 
   document.getElementById('transformBtn').addEventListener('click', runTransform);
@@ -200,8 +206,10 @@
   preserveCase.addEventListener('change', runTransform);
 
   document.getElementById('copyBtn').addEventListener('click', async ()=>{
-    try{ await navigator.clipboard.writeText(output.textContent); alert('Tersalin!'); }
-    catch(e){ alert('Gagal menyalin.'); }
+    try{
+      await navigator.clipboard.writeText(output.textContent);
+      alert('Tersalin!');
+    }catch(e){ alert('Gagal menyalin.'); }
   });
 
   document.getElementById('downloadBtn').addEventListener('click', ()=>{
@@ -212,7 +220,6 @@
     URL.revokeObjectURL(url);
   });
 
-  // initial run
   runTransform();
 </script>
 </body>
