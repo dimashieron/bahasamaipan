@@ -23,16 +23,15 @@
   <header>
     <div>
       <h1>maipaaaaaaaaan🔋⚡</h1>
-      <div class="muted">Masukkan teks -> hasil otomatis. Aturan tetap: <code>K → P</code>, <code>ng → m</code>, plus aturan kata & huruf tambahan.</div>
     </div>
   </header>
 
   <div class="card">
-    <strong>Aturan (tetap):</strong>
+    <strong>Masukin teksnya, sisanya biar bot yang atur :3:</strong>
     <div class="row" style="margin-top:8px">
       <!-- Fixed mapping: K -> P (permanent). Hidden input keeps code compatibility. -->
       <input type="hidden" id="kMap" value="p" />
-      <div class="muted">Mapping untuk huruf <code>K</code>: <strong>K → P</strong> (tetap). <strong>ng → m</strong> aktif.</div>
+      <div class="muted">
 
       <label title="Aktifkan penggantian 'ng' → 'm'">
         <input type="checkbox" id="ngToggle" checked /> Ganti <code>ng</code> → <code>m</code>
@@ -49,7 +48,6 @@
     </div>
 
     <div class="row">
-      <button class="btn" id="transformBtn">Transform sekarang</button>
       <button class="btn" id="copyBtn">Salin hasil</button>
       <button class="btn" id="downloadBtn">Unduh .txt</button>
       <div style="flex:1" class="muted">Hasil akan muncul langsung di bawah saat transformasi dijalankan.</div>
@@ -60,9 +58,6 @@
       <pre id="outputText"></pre>
     </div>
 
-    <footer>
-      Catatan: Aturan saat ini tetap — <code>K → P</code>, <code>ng → m</code>, plus penggantian kata: <code>terimakasih→timapaci</code>, <code>kamu→kamuna</code>, <code>aku→akuna</code>, <code>nya→na</code>, dan huruf <code>l→n</code>. Kapitalisasi dipertahankan bila opsi dicentang.
-    </footer>
   </div>
 
   <script>
@@ -94,44 +89,24 @@
     return repl.toLowerCase();
   }
 
-  // Insert "Bypass first-letter" checkbox into the UI (next to preserveCase)
-  (function insertBypassCheckbox(){
-    try{
-      const preserveEl = document.getElementById('preserveCase');
-      if(preserveEl && !document.getElementById('bypassFirst')){
-        const container = preserveEl.parentElement.parentElement || preserveEl.parentElement;
-        const label = document.createElement('label');
-        label.style.marginLeft = '8px';
-        label.title = "Bypass first letter of each word (don't apply rules to first letter)";
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.id = 'bypassFirst';
-        cb.checked = false;
-        label.appendChild(cb);
-        label.appendChild(document.createTextNode(' Bypass first-letter'));
-        container.appendChild(label);
-      }
-    }catch(e){ /* ignore UI insert errors */ }
-  })();
-
-
   function transformText(text, opts){
     const preserve = !!opts.preserveCase;
 
-    // Multi replacements — 'kak' protected
+    // Kata yang diproteksi dari perubahan huruf
+    const protectedWords = ['kak'];
+
+    // Multi-word replacements (words replaced first and tokenized)
     const multi = [
-      ['kak','kak'],            // protected keyword
       ['terimakasih','timapaci'],
       ['kamu','kamuna'],
       ['aku','akuna'],
-      ['nya','na']              // only matched as whole word
     ];
 
     const tokenMap = {};
     let tokenIndex = 0;
-
-    // MULTI Replace with word-boundaries, protect replaced segments with tokens
     let s = text;
+
+    // Apply multi-word replacements (whole-word) and protect via tokens
     for(const [from,to] of multi){
       const esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const re = new RegExp('\\b' + esc + '\\b', 'gi');
@@ -143,7 +118,21 @@
       });
     }
 
-    // CHARACTER-level rules with first-letter bypass
+    // Protect explicit protectedWords
+    for(const w of protectedWords){
+      const esc = w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('\\b' + esc + '\\b', 'gi');
+      s = s.replace(re, (m)=>{
+        const token = '§§' + (tokenIndex++) + '§§';
+        tokenMap[token] = m; // keep original case
+        return token;
+      });
+    }
+
+    // === NEW: Replace 'nya' everywhere (global), preserving case if requested ===
+    s = s.replace(/nya/gi, (m) => preserve ? preserveMultiCase(m, 'na') : 'na');
+
+    // CHARACTER-level rules with first-letter bypass (forced)
     let out = '';
     for(let i=0;i<s.length;i++){
       const ch = s[i];
@@ -157,32 +146,29 @@
         continue;
       }
 
-      // Determine if this position is start of a word:
-      // start if at index 0 or previous char is non-word (not letter/number/underscore)
       const prev = s[i-1] || '';
       const isStartOfWord = (i === 0) || !(/[A-Za-z0-9_]/).test(prev);
 
-      // Bypass first-letter of a word if option enabled and current char is a letter
-      if(opts.bypassFirst && isStartOfWord && /[A-Za-z]/i.test(ch)){
+      // FIRST-LETTER BYPASS (automatic)
+      if(isStartOfWord && /[A-Za-z]/.test(ch)){
         out += ch;
         continue;
       }
 
-      // ng → m (digraph)
-      if(opts.ngEnabled && (ch.toLowerCase() === 'n' && next.toLowerCase() === 'g')){
-        const pair = ch + next;
-        out += preservePairToSingle(pair, 'm', preserve);
-        i++; // skip 'g'
+      // ng -> m
+      if(ch.toLowerCase() === 'n' && next.toLowerCase() === 'g'){
+        out += preservePairToSingle(ch+next, 'm', preserve);
+        i++; // skip g
         continue;
       }
 
-      // k → p
+      // k -> p (non-first letters only due to bypass)
       if(ch.toLowerCase() === 'k'){
-        out += mapCharWithCase(ch, opts.kMap.toLowerCase(), preserve);
+        out += mapCharWithCase(ch, 'p', preserve);
         continue;
       }
 
-      // l → n
+      // l -> n
       if(ch.toLowerCase() === 'l'){
         out += mapCharWithCase(ch, 'n', preserve);
         continue;
@@ -192,7 +178,7 @@
       out += ch;
     }
 
-    // restore tokens
+    // Restore tokens to their intended replacements/protected originals
     for(const token in tokenMap){
       out = out.split(token).join(tokenMap[token]);
     }
@@ -203,48 +189,26 @@
   // DOM hooks
   const input = document.getElementById('inputText');
   const output = document.getElementById('outputText');
-  const kMap = document.getElementById('kMap');
-  const ngToggle = document.getElementById('ngToggle');
   const preserveCase = document.getElementById('preserveCase');
 
-  // get the bypass checkbox (may have been inserted above)
-  function getBypassCheckbox(){ return document.getElementById('bypassFirst'); }
-
   function runTransform(){
-    const bypass = !!(getBypassCheckbox && getBypassCheckbox().checked);
-    const opts = {kMap:kMap.value || 'p', ngEnabled:ngToggle.checked, preserveCase: preserveCase.checked, bypassFirst: bypass};
-    // pass bypassFirst as opts.bypassFirst for usage
-    opts.bypassFirst = bypass; // maintain compatibility
-    // transform uses opts.bypassFirst (but code reads opts.bypassFirst via opts.bypassFirst?)
-    // to keep existing variable name used earlier, also copy it to opts.bypassFirst
-    // call transformText with updated options
-    output.textContent = transformText(input.value, {kMap:opts.kMap, ngEnabled:opts.ngEnabled, preserveCase:opts.preserveCase, bypassFirst:opts.bypassFirst});
+    output.textContent = transformText(input.value, { preserveCase: preserveCase.checked });
   }
 
-  // wire events
   document.getElementById('transformBtn').addEventListener('click', runTransform);
   input.addEventListener('input', runTransform);
-  ngToggle.addEventListener('change', runTransform);
   preserveCase.addEventListener('change', runTransform);
-  // also wire the newly inserted checkbox if exists
-  setTimeout(()=>{ const b = getBypassCheckbox(); if(b) b.addEventListener('change', runTransform); }, 50);
 
   document.getElementById('copyBtn').addEventListener('click', async ()=>{
-    try{
-      await navigator.clipboard.writeText(output.textContent);
-      alert('Tersalin!');
-    }catch(e){ alert('Gagal menyalin.'); }
+    try{ await navigator.clipboard.writeText(output.textContent); alert('Tersalin!'); }
+    catch(e){ alert('Gagal menyalin.'); }
   });
 
   document.getElementById('downloadBtn').addEventListener('click', ()=>{
     const blob = new Blob([output.textContent], {type:'text/plain'});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'hasil-transform.txt';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    const a = document.createElement('a'); a.href = url; a.download = 'hasil-transform.txt';
+    document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   });
 
